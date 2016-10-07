@@ -5,6 +5,14 @@ JavaScript (EcmaScript 6 syntax), require.js compatible library for loading GLSL
 
 Designed for use in browser with WebGL for loading fragment and vertex shader code.
 
+Khronos glslangValidator fork with `#include` syntax:
+* https://github.com/A2K/glslang
+
+Atom plugins forks with `#include` syntax:
+* https://github.com/A2K/language-glsl
+* https://github.com/A2K/linter-glsl
+* https://github.com/A2K/atom-pigments
+
 ### #include statements
 
 ##### Basic GLSL syntax
