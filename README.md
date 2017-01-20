@@ -5,9 +5,7 @@ JavaScript (EcmaScript 6 syntax), require.js compatible library for loading GLSL
 
 Designed for use in browser with WebGL for loading fragment and vertex shader code.
 
-##### Library dependencies
-* underscore.js http://underscorejs.org
-* jQuery https://jquery.com
+No third-party dependencies.
 
 ##### Related projects
 Khronos glslangValidator fork with `#include` syntax:
@@ -74,7 +72,7 @@ void main() {
 #### Usage example
 
 ```js
-new ShaderLoader({
+new ShaderLoader({ // optional! default values just for example
         includeSyntax: new RegExp(/^\s*#include\s*<(.*)>\s*$/),
         typePostfix: /^(vertex|fragment)$/,
         shaderFileExtention: '.glsl',
