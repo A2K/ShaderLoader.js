@@ -1,16 +1,25 @@
 "use strict";
 
-var ShaderLoader = function ($, _) {
+(function() {
+
+var ShaderLoader = function () {
+
+    function uniq(array) {
+        return Array.from(new Set(array));
+    }
 
     function parseFilename(filename, options) {
         var f = filename.replace(/^\s*#include\s*<(.*)>\s*$/, '$2');
         f = f.replace(new RegExp('\.' + options.shaderFileExtention + '$/'), '');
-        var parts = _.flatten(f.split('/').map(s => s.split('_')));
+        var parts = [].concat.apply([], f.split('/').map(s => s.split('_')));
         if (parts.length > 1) {
             if (options.typePostfix.test(parts[parts.length-1])) {
-                var last = parts.last;
-                parts[parts.length - 1] = parts[parts.length - 2];
-                parts[parts.length - 2] = last;
+                if ((parts[parts.length - 1] == 'vertex') ||
+                    (parts[parts.length - 1] == 'fragment')) {
+                    var last = parts[parts.length - 1];
+                    parts[parts.length - 1] = parts[parts.length - 2];
+                    parts[parts.length - 2] = last;
+                }
             }
         }
         return parts.join('_');
@@ -65,7 +74,7 @@ var ShaderLoader = function ($, _) {
 
         processShaderCode(shaders, shaderCode, callback) {
 
-            var errors = _.keys(shaderCode).filter(key => shaderCode[key] == 'ERROR');
+            var errors = Object.keys(shaderCode).filter(key => shaderCode[key] == 'ERROR');
 
             if (errors.length) {
                 console.error('Some shader files failed to load:', errors.join(', '));
@@ -84,8 +93,9 @@ var ShaderLoader = function ($, _) {
                     callback([], false);
                 }
                 else {
-                    console.log('loading missing includes:', data.missingIncludes.join(', '));
-                    this.load(_.uniq(_.union(shaders, data.missingIncludes)), callback);
+                    var set = new Set(data.missingIncludes);
+                    shaders.forEach(set.add.bind(set));
+                    this.load(Array.from(set), callback);
                 }
             }
             else {
@@ -104,7 +114,7 @@ var ShaderLoader = function ($, _) {
                     parts.reverse();
                     var path = res;
                     while (parts.length > 1) {
-                        var part = parts.last;
+                        var part = parts[parts.length -1];
                         if (!(part in path)) {
                             path[part] = {};
                         }
@@ -113,6 +123,20 @@ var ShaderLoader = function ($, _) {
                     }
                     path[parts[0]] = preprocessedCode[filename];
                 });
+
+            res.path = function(path) {
+                var obj = this;
+                var p = path.split('_');
+                if (p[p.length-1] == 'fragment' || p[p.length-1] == 'vertex') {
+                    var t = p[p.length-2];
+                    p[p.length-2] = p[p.length-1];
+                    p[p.length-1] = t;
+                }
+                for (var i=0, path=p, len=path.length; i<len; i++){
+                    obj = obj[path[i]];
+                };
+                return obj;
+            }.bind(res);
 
             return res;
         }
@@ -128,9 +152,8 @@ var ShaderLoader = function ($, _) {
 
         load(shaders, callback) {
             this.shaders = shaders;
-            this.loaded = _.object(shaders, shaders.map(function() {
-                return false;
-            }));
+            this.loaded = {};
+            shaders.forEach(shader => { this.loaded[shader] = false; });
             this.callback = callback;
             shaders.forEach(function (shader) {
 
@@ -144,9 +167,10 @@ var ShaderLoader = function ($, _) {
         }
 
         checkCompletion() {
-            if (_.values(this.shaders).map(n => {
-                    return this.loaded[n] !== false;
-                }).reduce((a, b) => a && b)) {
+            if (Object.keys(this.shaders).map(key => {
+                var n = this.shaders[key];
+                return this.loaded[n] !== false;
+            }).reduce((a, b) => a && b)) {
                 if (this.callback) {
                     this.callback(this.loaded);
                     this.callback = null;
@@ -164,23 +188,27 @@ var ShaderLoader = function ($, _) {
 
         loadShader(shader) {
             var url = this.getShaderUrl(shader);
-            $.ajax({
-                url: url,
-                dataType: 'text',
-                context: {
-                    shader: shader
-                },
-                complete: function (args) {
-                    if (args.responseText) {
-                        this.cache.raw[shader] = args.responseText;
-                        this.loaded[shader] = args.responseText;
-                    }
-                    this.checkCompletion();
-                }.bind(this),
-                error: function () {
-                    this.handleError(shader);
-                }.bind(this)
-            });
+
+            var request = new XMLHttpRequest();
+            request.open("GET", url, true);
+            request.responseType = "text";
+
+            request.onload = (function(request, data, oEvent) {
+
+                var data = request.response;
+
+                this.cache.raw[shader] = data;
+                this.loaded[shader] = data;
+
+                this.checkCompletion();
+            }.bind(this, request));
+
+            request.onerror = () => {
+                console.error('failed to load shader:', shader);
+            };
+
+            request.send();
+
         }
 
         handleError(shader) {
@@ -226,7 +254,7 @@ var ShaderLoader = function ($, _) {
 
             for (var shaderName in shaders) {
                 var resolved = new Set();
-                var queue = _.uniq(deps[shaderName])
+                var queue = uniq(deps[shaderName])
                     .map(function (n) {
                         return {
                             name: n,
@@ -286,13 +314,12 @@ var ShaderLoader = function ($, _) {
         }
 
         removeIncludes(code) {
-            return _.filter(code.split('\n'), (line => {
+            return code.split('\n').filter(line => {
                     if (this.rx.exec(line)) {
                         return false;
                     }
                     return true;
-                }).bind(this))
-                .join('\n');
+                }).join('\n');
         }
 
         generateCode(shaderCode, includes) {
@@ -316,7 +343,7 @@ var ShaderLoader = function ($, _) {
             }
             return {
                 code: res,
-                missingIncludes: _.uniq(missingIncludes)
+                missingIncludes: uniq(missingIncludes)
             };
         }
 
@@ -325,8 +352,10 @@ var ShaderLoader = function ($, _) {
     return ShaderLoader;
 };
 
-if (typeof(define) != undefined) {
-    define(['jquery', 'underscore'], ShaderLoader);
+if (typeof(define) === 'function') {
+    define('ShaderLoader', [], ShaderLoader);
 } else {
     ShaderLoader = ShaderLoader();
 }
+
+}());
